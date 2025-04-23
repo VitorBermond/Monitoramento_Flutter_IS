@@ -1,16 +1,24 @@
-# teste1
+# Grafico de CPU simulada simples
 
-A new Flutter project.
+Esse projeto é uma interface flutter que recebe valores simulados de CPU via RabbitMQ e os plota num gráfico construído usando a biblioteca fl_charts
 
-## Getting Started
+# ⚙️ Pré-requisitos
 
-This project is a starting point for a Flutter application.
+RabbitMQ rodando (Se não estiver rodando na máquina local, o ip das conexões no código deverão ser alterados)
+Flutter instalado
+Git instalado
 
-A few resources to get you started if this is your first Flutter project:
+# Setup de serviços
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+Inicie o serviço publicador localizado na pasta python_services
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+python3 pubcpu.py
+
+# Iniciar aplicação flutter
+
+Execute os seguintes comandos no diretorio do projeto
+
+flutter clean 
+flutter pub get
+flutter run
+
