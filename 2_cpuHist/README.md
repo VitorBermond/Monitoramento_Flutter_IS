@@ -1,16 +1,46 @@
-# teste7v7
+# Grafico de CPU simulada com modo tempo real e histórico
 
-A new Flutter project.
+Esse projeto é uma interface flutter que recebe valores simulados de CPU via RabbitMQ e os plota num gráfico construído usando a biblioteca fl_charts. A aplicação também conta com um banco de dados que pode ser consultado com comandos dentro da própria aplicação.
 
-## Getting Started
+# ⚙️ Pré-requisitos
 
-This project is a starting point for a Flutter application.
+RabbitMQ rodando (Se não estiver rodando na máquina local, o ip das conexões deverão ser alterados dentro do código)
 
-A few resources to get you started if this is your first Flutter project:
+Flutter instalado
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+Python instalado
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Git instalado
+
+# Instruções para executar o projeto
+
+## Clone o repositório
+
+git clone https://github.com/VitorBermond/Monitoramento_Flutter_IS.git
+
+## Entre na pasta referente a este projeto
+
+cd Monitoramento_Flutter_IS/2_cpuHist
+
+## Inicie o serviço publicador e de tratamento de históricos
+
+cd python_services
+
+python3 pubcpu5.py
+
+python3 reqhistcpu2.py
+
+## Preparação e execução da aplicação Flutter
+
+cd .. (volta para o diretório)
+
+flutter clean 
+
+flutter pub get
+
+flutter run
+
+# Se tudo cer certo...
+
+O gráfico irá ser constantemente atualizado com os dados aleatórios gerados pelo serviço publicador no modo tempo real;
+O usuário poderá buscar dados registrados inserindo intervalos nos campos de data final e inicial -- e visualizar esses dados no modo histórico;
