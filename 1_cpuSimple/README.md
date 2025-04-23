@@ -4,21 +4,31 @@ Esse projeto é uma interface flutter que recebe valores simulados de CPU via Ra
 
 # ⚙️ Pré-requisitos
 
-RabbitMQ rodando (Se não estiver rodando na máquina local, o ip das conexões no código deverão ser alterados)
+RabbitMQ rodando (Se não estiver rodando na máquina local, o ip das conexões deverão ser alterados dentro do código)
 
 Flutter instalado
 
 Git instalado
 
-# Setup de serviços
+# Instruções para executar o projeto
 
-Inicie o serviço publicador localizado na pasta python_services
+## Clone o repositório
+
+git clone https://github.com/VitorBermond/Monitoramento_Flutter_IS.git
+
+## Entre na pasta referente a este projeto
+
+cd Monitoramento_Flutter_IS/1_cpuSimple
+
+## Inicie o serviço publicador localizado na pasta python_services
+
+cd python_services
 
 python3 pubcpu.py
 
-# Iniciar aplicação flutter
+## Execute os seguintes comandos no diretorio do projeto:
 
-Execute os seguintes comandos no diretorio do projeto
+cd .. (volta para o diretório)
 
 flutter clean 
 
