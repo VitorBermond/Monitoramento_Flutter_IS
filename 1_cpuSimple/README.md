@@ -8,6 +8,8 @@ RabbitMQ rodando (Se não estiver rodando na máquina local, o ip das conexões 
 
 Flutter instalado
 
+Python instalado
+
 Git instalado
 
 # Instruções para executar o projeto
