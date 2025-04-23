@@ -26,7 +26,7 @@ cd python_services
 
 python3 pubcpu.py
 
-## Execute os seguintes comandos no diretorio do projeto:
+## Preparação e execução da aplicação Flutter
 
 cd .. (volta para o diretório)
 
@@ -36,3 +36,6 @@ flutter pub get
 
 flutter run
 
+# Se tudo cer certo...
+
+O gráfico irá ser constantemente atualizado com os dados aleatórios gerados pelo serviço
