@@ -2,6 +2,10 @@
 
 Esse projeto é uma interface flutter que recebe valores simulados de multiplas métricas via RabbitMQ e as plota em gráfico construídos usando a biblioteca fl_charts. A aplicação foi construída e compilada para linux e então empacotada em formato .deb. O arquivo zipado são os arquivos utilizados para construir o executável. Já o arquivo .deb é o arquivo utilizado para instalar a interface localmente.
 
+o .deb foi construído utilizando o tutorial disponível em:
+
+https://jacodouhoje.dev/2025/02/06/como-criar-um-binario-para-distribuir-aplicativos-flutter-no-linux/
+
 # ⚙️ Pré-requisitos
 
 Sistema operacional Linux Ubuntu
@@ -12,15 +16,13 @@ Abra o executável (monitoramentoapp-deb.deb)
 
 Instale
 
-Abra no gerenciador de apps do Linux e abra a aplicação (monitoramentoapp)
+Abra o gerenciador de apps do Linux e abra a aplicação (monitoramentoapp)
 
 # Se tudo cer certo...
 
 A aplicação irá abrir. Existirá diferentes telas para serem acessadas e monitorar as respectivas métricas. Mais informações no documento do TCC.
 
 # Teste a funcionalidade
-
-Será necessário um broker RabbitMQ rodando. Se não estiver rodando na máquina local, o ip das conexões poderá ser alterado dentro da aplicação.
 
 Para testar localmente, execute a imagem docker oficial do RabbitMQ:
 
