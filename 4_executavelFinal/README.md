@@ -41,7 +41,7 @@ python3 pubunixCPU.py
  - O resultado esperado é algo como a imagem img.png
 
 <div align="center">
-<img src="https://github.com/VitorBermond/Monitoramento_Flutter_IS/edit/master/4_executavelFinal/img.png" width="700px" />
+<img src="![Image](https://github.com/user-attachments/assets/11022cff-20a4-4e0f-aba3-d0458d7af844)" width="700px" />
 </div>
 
 
