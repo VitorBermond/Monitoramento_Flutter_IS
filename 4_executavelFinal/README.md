@@ -24,12 +24,22 @@ A aplicação irá abrir. Existirá diferentes telas para serem acessadas e moni
 
 # Teste a funcionalidade
 
-Para testar localmente, execute a imagem docker oficial do RabbitMQ:
+ - Para testar localmente, instale o docker e as bibliotecas necessárias.
 
-docker run -it --rm --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:4-management
+sudo snap install docker
 
-Execute um serviço que publica dados simulados de CPU. Eles serão recebidos e plotados nos gráficos da tela de CPU dentro da aplicação:
+sudo apt install python3-pika
+
+ - Execute a imagem docker oficial do RabbitMQ:
+
+sudo docker run -it --rm --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:4-management
+
+ - Execute um serviço que publica dados simulados de CPU. Eles serão recebidos e plotados nos gráficos da tela de CPU dentro da aplicação:
 
 python3 pubunixCPU.py
 
-(pode ser necessário instalar o Docker e a biblioteca "pika" para o python)
+ - O resultado esperado é algo como a imagem img.png
+
+https://github.com/VitorBermond/Monitoramento_Flutter_IS/edit/master/4_executavelFinal/img.png
+
+
