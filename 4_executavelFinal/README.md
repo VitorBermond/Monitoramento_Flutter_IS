@@ -44,6 +44,10 @@ python3 pubunixCPU.py
   <img src="https://raw.githubusercontent.com/VitorBermond/Monitoramento_Flutter_IS/master/4_executavelFinal/img.png" width="700px" />
 </div>
 
+ - Teste também a função de requisitar histórico rodando o serviço que trata requisições de CPU
 
+python3 reqhistunixCPU.py
+
+- Rode o serviço e tente buscar um histórico da hora atual (já vem selecionada por padrão) após publicar alguns dados usando o serviço publicador (pubunixCPU.py)
 
 
