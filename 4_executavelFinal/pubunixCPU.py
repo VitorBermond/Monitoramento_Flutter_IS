@@ -4,7 +4,7 @@ import random
 import time
 import csv
 import os
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone  # Corrigido: Use timezone em vez de UTC
 
 # Configuração da conexão com o RabbitMQ
 connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
@@ -30,7 +30,7 @@ def remove_old_data(filename):
         return
 
     header = rows[0]
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)  # Corrigido para usar timezone.utc
     threshold_date = now - timedelta(days=30)
 
     filtered_rows = [header]
@@ -41,7 +41,7 @@ def remove_old_data(filename):
             raw_ts = int(row[0])
             if not (0 < raw_ts < int(now.timestamp()) + 10):  # Validação simples
                 raise ValueError("Timestamp fora do intervalo válido")
-            timestamp = datetime.fromtimestamp(raw_ts, UTC)
+            timestamp = datetime.fromtimestamp(raw_ts, timezone.utc)  # Corrigido para usar timezone.utc
             if timestamp >= threshold_date:
                 filtered_rows.append(row)
         except (ValueError, OSError) as e:
@@ -54,7 +54,7 @@ def remove_old_data(filename):
 
 try:
     while True:
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)  # Corrigido para usar timezone.utc
         timestamp = int(now.timestamp())  # <-- Agora timestamp é inteiro
 
         for service_name in service_names:
