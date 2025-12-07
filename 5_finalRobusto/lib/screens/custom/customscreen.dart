@@ -1,0 +1,580 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:dart_amqp/dart_amqp.dart';
+import 'dart:convert';
+
+import 'package:monitoramentoapp/generals/rainbowbutton.dart';
+import 'package:monitoramentoapp/screens/custom/customconfig.dart';
+
+import 'package:monitoramentoapp/generals/date_input.dart';
+import 'package:monitoramentoapp/generals/metrics.dart';
+import 'package:monitoramentoapp/generals/visibility_buttons.dart';
+import 'package:monitoramentoapp/generals/linechart.dart';
+import 'package:monitoramentoapp/generals/globals.dart';
+
+class CUSTOMScreen extends StatefulWidget {
+  const CUSTOMScreen({super.key});
+
+  @override
+  State<CUSTOMScreen> createState() => _CUSTOMScreenState();
+}
+
+class _CUSTOMScreenState extends State<CUSTOMScreen> {
+  // Cria o DataStore (metrics.dart)
+  final customDataStore = MetricDataManager.getInstance("custom");
+
+  // Cria os controladores do conjunto de TextFields para inserção da data inicial (date_input.dart)
+  final DateTimeControllers startControllers = DateTimeControllers();
+
+  // Cria os controladores do conjunto de TextFields para inserção da data final (date_input.dart)
+  final DateTimeControllers endControllers = DateTimeControllers();
+
+  // Cria o Textfield para inserção manual de serviços
+  final TextEditingController _manualServiceController =
+      TextEditingController();
+
+  // Conexão RabbitMQ
+  late Client client;
+  final String realQueue = filaTempoReal;
+  final String histQueue = filaHistorico;
+  final String reqHQueue = filaRequisitarHistorico;
+
+  // Estado inicial
+  @override
+  void initState() {
+    super.initState();
+    _rabbitMQRealTime();
+    _rabbitMQHistoric();
+  }
+
+  // Ações ao sair da tela
+  @override
+  void dispose() {
+    startControllers.dispose();
+    endControllers.dispose();
+    _manualServiceController.dispose();
+
+    client.close();
+    super.dispose();
+  }
+
+  /// Função auxiliar que tenta acessar o valor dentro de um JSON com vários níveis
+  dynamic extractNestedValue(
+    Map<String, dynamic> data,
+    String? key1,
+    String? key2,
+    String? key3,
+  ) {
+    dynamic value = data;
+
+    // lista com apenas os campos preenchidos
+    final keys = [key1, key2, key3]
+        .where((k) => k != null && k.trim().isNotEmpty)
+        .toList();
+
+    for (final k in keys) {
+      if (value is Map && value.containsKey(k)) {
+        value = value[k];
+      } else {
+        return null; // caminho inválido
+      }
+    }
+    return value;
+  }
+
+// Conexão RabbitMQ do Modo Tempo Real — versão robusta e hierárquica
+  void _rabbitMQRealTime() async {
+    try {
+      client = Client(settings: ConnectionSettings(host: hostIp));
+      final channel = await client.channel();
+      final queue = await channel.queue(realQueue, durable: isDurable);
+
+      queue.consume().then((Consumer consumer) {
+        consumer.listen((AmqpMessage message) {
+          try {
+            final data = jsonDecode(message.payloadAsString);
+
+            /// --- Função auxiliar para acessar valores hierárquicos ---
+            dynamic extractNestedValue(
+              Map<String, dynamic> data,
+              String? key1,
+              String? key2,
+              String? key3,
+            ) {
+              dynamic value = data;
+              final keys = [key1, key2, key3]
+                  .where((k) => k != null && k.trim().isNotEmpty)
+                  .toList();
+              for (final k in keys) {
+                if (value is Map && value.containsKey(k)) {
+                  value = value[k];
+                } else {
+                  return null;
+                }
+              }
+              return value;
+            }
+
+            // --- MÉTRICA robusta + hierárquica ---
+            double metricValue = 0.0;
+            try {
+              final rawMetric = extractNestedValue(
+                data,
+                campoMetrica1,
+                campoMetrica2,
+                campoMetrica3,
+              );
+              if (rawMetric is num) {
+                metricValue = rawMetric.toDouble();
+              } else if (rawMetric is String) {
+                metricValue = double.tryParse(rawMetric) ?? 0.0;
+              } else {
+                metricValue = 0.0;
+              }
+            } catch (_) {
+              metricValue = 0.0;
+            }
+
+            // --- SERVICENAME robusto + hierárquico ---
+            String serviceName = 'APP';
+            try {
+              final rawService = extractNestedValue(
+                data,
+                campoServiceName1,
+                campoServiceName2,
+                campoServiceName3,
+              );
+              if (rawService?.toString().trim().isNotEmpty == true) {
+                serviceName = rawService.toString();
+              }
+            } catch (_) {
+              serviceName = 'APP';
+            }
+
+            // --- TIMESTAMP robusto + hierárquico ---
+            int rawTs = 0;
+            try {
+              final rawTimestamp = extractNestedValue(
+                data,
+                campoTimestamp1,
+                campoTimestamp2,
+                campoTimestamp3,
+              );
+              if (rawTimestamp is int) {
+                rawTs = rawTimestamp;
+              } else if (rawTimestamp is String) {
+                rawTs = int.tryParse(rawTimestamp) ?? 0;
+              } else if (rawTimestamp is double) {
+                rawTs = rawTimestamp.toInt();
+              } else {
+                rawTs = 0;
+              }
+            } catch (_) {
+              rawTs = 0;
+            }
+
+            // --- Normalização do timestamp ---
+            int timestampMs;
+            final absTs = rawTs.abs();
+
+            // Heurística por magnitude
+            if (absTs >= 1000000000000000000) {
+              timestampMs = rawTs ~/ 1000000; // ns → ms
+            } else if (absTs >= 1000000000000000) {
+              timestampMs = rawTs ~/ 1000; // µs → ms
+            } else if (absTs >= 1000000000000) {
+              timestampMs = rawTs; // já em ms
+            } else if (absTs >= 1000000000) {
+              timestampMs = rawTs * 1000; // s → ms
+            } else {
+              timestampMs = rawTs * 1000; // fallback
+            }
+
+            // Validação do intervalo
+            if (timestampMs <= -8640000000000000 ||
+                timestampMs >= 8640000000000000) {
+              debugPrint(
+                  '⚠️ Timestamp fora do intervalo ($rawTs → $timestampMs), usando DateTime.now().');
+              timestampMs = DateTime.now().toUtc().millisecondsSinceEpoch;
+            }
+
+            // --- Formatação do timestamp ---
+            String formattedTime = DateFormat("📅dd/MM/yy\n🕒HH:mm:ss").format(
+              DateTime.fromMillisecondsSinceEpoch(timestampMs).toLocal(),
+            );
+
+            // --- Atualização dos dados no gráfico ---
+            setState(() {
+              // Adiciona o nome à lista de serviços
+              if (!customDataStore.servicesList.containsValue(serviceName)) {
+                int newKey = customDataStore.servicesList.length;
+                customDataStore.servicesList[newKey] = serviceName;
+              }
+
+              // Inicializa mapas
+              customDataStore.realData.putIfAbsent(serviceName, () => []);
+              customDataStore.timeLabelsReal.putIfAbsent(serviceName, () => []);
+              customDataStore.timeEpochsReal.putIfAbsent(serviceName, () => []);
+
+              // Limita quantidade de pontos
+              if ((customDataStore.realData[serviceName]?.length ?? 0) >=
+                  maxPoints) {
+                customDataStore.realData[serviceName]?.removeAt(0);
+                customDataStore.timeLabelsReal[serviceName]?.removeAt(0);
+                customDataStore.timeEpochsReal[serviceName]?.removeAt(0);
+              }
+
+              // Adiciona novos pontos
+              customDataStore.realData[serviceName]!.add(
+                FlSpot(customDataStore.indexReal.toDouble(), metricValue),
+              );
+              customDataStore.timeLabelsReal[serviceName]!.add(formattedTime);
+              customDataStore.timeEpochsReal[serviceName]!.add(timestampMs);
+
+              // Incrementa o índice global
+              customDataStore.indexReal++;
+            });
+          } catch (e, st) {
+            debugPrint(
+                '❌ Erro ao processar mensagem RabbitMQ: $e\n$st\nPayload: ${message.payloadAsString}');
+          }
+        });
+      });
+    } catch (e) {
+      debugPrint("❌ Erro ao conectar ao RabbitMQ: $e");
+    }
+  }
+
+  // Conexão RabbitMQ Modo Histórico
+  void _rabbitMQHistoric() {
+    client.channel().then((Channel channel) {
+      return channel.queue(histQueue, durable: false);
+    }).then((Queue queue) {
+      queue.consume().then((Consumer consumer) {
+        consumer.listen((AmqpMessage message) {
+          try {
+            final payload = jsonDecode(message.payloadAsString);
+
+            if (payload is Map<String, dynamic> &&
+                payload.containsKey('historico')) {
+              final data = payload['historico'];
+              final serviceName = payload[campoServiceName1]?.toString() ?? '0';
+
+              if (data is List<dynamic>) {
+                setState(() {
+                  if (!customDataStore.servicesList
+                      .containsValue(serviceName)) {
+                    final newKey = customDataStore.servicesList.length;
+                    customDataStore.servicesList[newKey] = serviceName;
+                  }
+
+                  customDataStore.histData.putIfAbsent(serviceName, () => []);
+                  customDataStore.histData[serviceName]?.clear();
+                  customDataStore.timeLabelsHist
+                      .putIfAbsent(serviceName, () => []);
+                  customDataStore.timeLabelsHist[serviceName]?.clear();
+                  customDataStore.timeEpochsHist
+                      .putIfAbsent(serviceName, () => []);
+                  customDataStore.timeEpochsHist[serviceName]?.clear();
+
+                  // Nova contagem de índices para Downsampling
+                  int timeIndex = 0;
+
+                  for (var entry in data) {
+                    if (entry is Map<String, dynamic> &&
+                        entry[campoMetrica1] != null &&
+                        entry[campoTimestamp1] != null) {
+                      customDataStore.histData[serviceName]!.add(FlSpot(
+                        timeIndex.toDouble(),
+                        (entry[campoMetrica1] as num).toDouble(),
+                      ));
+
+                      int timestampEpoch =
+                          (entry[campoTimestamp1] as num).toInt();
+                      String formattedTime =
+                          DateFormat("📅dd/MM/yy\n🕒HH:mm:ss").format(
+                        DateTime.fromMillisecondsSinceEpoch(
+                                timestampEpoch * 1000)
+                            .toLocal(),
+                      );
+
+                      customDataStore.timeLabelsHist[serviceName]!
+                          .add(formattedTime);
+                      customDataStore.timeEpochsHist[serviceName]!
+                          .add(timestampEpoch);
+
+                      timeIndex++;
+                    }
+                  }
+
+                  isRealTime = false;
+                  _applyDownsampling(serviceName);
+                });
+              } else {
+                debugPrint(
+                    "Erro: 'historico' não é uma lista. Recebido: $data");
+              }
+            } else {
+              debugPrint(
+                  "Erro: Payload inválido em $histQueue. Recebido: $payload");
+            }
+          } catch (e) {
+            debugPrint("Erro ao decodificar payload de $histQueue: $e");
+          }
+        });
+      });
+    });
+  }
+
+  // Aplica Downsampling para os dados recebidos da fila de histórico
+  void _applyDownsampling(String serviceName) {
+    if (!customDataStore.histData.containsKey(serviceName) ||
+        customDataStore.histData[serviceName]!.length <= maxPoints) {
+      return;
+    }
+
+    final List<FlSpot> originalData = customDataStore.histData[serviceName]!;
+    final List<String> originalLabels =
+        customDataStore.timeLabelsHist[serviceName] ?? [];
+    final List<int> originalEpochs =
+        customDataStore.timeEpochsHist[serviceName] ?? [];
+
+    final int step = (originalData.length / maxPoints).ceil();
+    final List<FlSpot> downsampledData = [];
+    final List<String> downsampledLabels = [];
+    final List<int> downsampledEpochs = [];
+
+    int newIndex = 0; // Começa do zero para o novo eixo X
+
+    for (int i = 0; i < originalData.length; i += step) {
+      int end =
+          (i + step < originalData.length) ? i + step : originalData.length;
+
+      double sumY = 0;
+      double sumEpoch = 0;
+
+      for (int k = i; k < end; k++) {
+        sumY += originalData[k].y;
+        if (k < originalEpochs.length) {
+          sumEpoch += originalEpochs[k];
+        }
+      }
+
+      int count = end - i;
+      double avgY = sumY / count;
+      double avgEpoch = sumEpoch / count;
+
+      downsampledData.add(FlSpot(newIndex.toDouble(), avgY));
+
+      int midpointIndex = (i + end) ~/ 2;
+      if (midpointIndex < originalLabels.length) {
+        downsampledLabels.add(originalLabels[midpointIndex]);
+      }
+      if (midpointIndex < originalEpochs.length) {
+        downsampledEpochs.add(avgEpoch.round());
+      }
+
+      newIndex++;
+    }
+
+    customDataStore.histData[serviceName] = downsampledData;
+    customDataStore.timeLabelsHist[serviceName] = downsampledLabels;
+    customDataStore.timeEpochsHist[serviceName] = downsampledEpochs;
+  }
+
+  // Envia uma requisição de histórico
+  void _requestHistoricalData() {
+    try {
+      final now = DateTime.now();
+
+      // Constrói o DateTime inicial considerando os valores inseridos e se for vazio utiliza a hora atual
+      final start = DateTime(
+        int.tryParse(startControllers.year.text) ?? now.year,
+        int.tryParse(startControllers.month.text) ?? now.month,
+        int.tryParse(startControllers.day.text) ?? now.day,
+        int.tryParse(startControllers.hour.text) ?? now.hour,
+        int.tryParse(startControllers.minute.text) ?? 0,
+      ).subtract(Duration(hours: 0));
+
+      // Constrói o DateTime final considerando os valores inseridos e se for vazio utiliza a hora atual
+      final end = DateTime(
+        int.tryParse(endControllers.year.text) ?? now.year,
+        int.tryParse(endControllers.month.text) ?? now.month,
+        int.tryParse(endControllers.day.text) ?? now.day,
+        int.tryParse(endControllers.hour.text) ?? now.hour,
+        int.tryParse(endControllers.minute.text) ?? 59,
+      ).subtract(Duration(hours: 0));
+
+      // Converte para timestamps em segundos (Unix epoch)
+      final int startTimestamp = start.toUtc().millisecondsSinceEpoch ~/ 1000;
+      final int endTimestamp = end.toUtc().millisecondsSinceEpoch ~/ 1000;
+
+      final channel = client.channel();
+      channel.then((Channel ch) {
+        ch.queue(reqHQueue, durable: false).then((Queue queue) {
+          final request = jsonEncode({
+            // Constroi o JSON da requisição
+            "start_datetime": startTimestamp,
+            "end_datetime": endTimestamp,
+            "services_list": customDataStore.servicesList.values.toList(),
+          });
+          queue.publish(request);
+          debugPrint("Requisição enviada com sucesso: $request");
+        });
+      });
+    } catch (e) {
+      debugPrint("Erro ao enviar requisição de histórico: $e");
+    }
+  }
+
+  // Ação do botão de mudar modo
+  void _toggleMode() {
+    setState(() {
+      isRealTime = !isRealTime;
+    });
+  }
+
+  // ação do botão de adicionar serviços manualmente
+  void _addManualService() {
+    final name = _manualServiceController.text.trim();
+    if (name.isEmpty) return;
+
+    setState(() {
+      // adiciona na lista se ainda não existir
+      if (!customDataStore.servicesList.containsValue(name)) {
+        final newKey = customDataStore.servicesList.length;
+        customDataStore.servicesList[newKey] = name;
+      }
+
+      // garante que todos os mapas já existam (tratamento não nulo)
+      customDataStore.realData.putIfAbsent(name, () => []);
+      customDataStore.timeLabelsReal.putIfAbsent(name, () => []);
+      customDataStore.timeEpochsReal.putIfAbsent(name, () => []);
+      customDataStore.histData.putIfAbsent(name, () => []);
+      customDataStore.timeLabelsHist.putIfAbsent(name, () => []);
+      customDataStore.timeEpochsHist.putIfAbsent(name, () => []);
+    });
+
+    _manualServiceController.clear();
+  }
+
+  // Construção da tela
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Monitoramento Personalizável"),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            tooltip: 'Resetar dados',
+            onPressed: () {
+              customDataStore.reset();
+              setState(() {});
+            },
+          ),
+          buildRainbowAppBarButton(
+            icon: Icons.settings,
+            tooltip: 'Configurações',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CustomSettingsScreen(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Cria os Widgets para inserção de data Inicial
+                  DateTimeInputRow(
+                    labelPrefix: "Inicial",
+                    controllers: startControllers,
+                  ),
+                  const SizedBox(height: 10),
+                  // Cria os Widgets para inserção de data Final
+                  DateTimeInputRow(
+                    labelPrefix: "Final",
+                    controllers: endControllers,
+                  ),
+                ],
+              ),
+              const SizedBox(width: 5),
+              Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                SizedBox(
+                  width: 200,
+                  child: ElevatedButton(
+                    onPressed: _toggleMode,
+                    child:
+                        Text(isRealTime ? "Modo Histórico" : "Modo Tempo Real"),
+                  ),
+                ),
+                SizedBox(height: 25),
+                SizedBox(
+                  width: 200,
+                  child: ElevatedButton(
+                    onPressed: _requestHistoricalData,
+                    child: const Text("Buscar Histórico"),
+                  ),
+                ),
+              ]),
+              SizedBox(width: 5),
+
+              // Campo + botão para adicionar serviço manualmente
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 200,
+                    child: ElevatedButton(
+                      onPressed: _addManualService,
+                      child: const Text('Adicionar serviço'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: 200,
+                    child: TextField(
+                      controller: _manualServiceController,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'Nome do serviço',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ]),
+            const SizedBox(height: 5),
+
+            // Cria os botões de visibilidade (visibility_buttons.dart)
+            ServiceVisibilityButtons(
+              dataStore: customDataStore,
+              onVisibilityToggled: () => setState(() {}),
+            ),
+
+            const SizedBox(height: 5),
+
+            // Gráfico de linha (linechart.dart)
+            MetricChart(
+              dataStore: customDataStore,
+              unitSuffix: unidade,
+              minY: customMinY,
+              maxY: customMaxY,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
